@@ -1,0 +1,84 @@
+version: '3.8'
+
+# To use this file, run: docker-compose --env-file .env.bank up --build
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      target: prod
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      NODE_ENV: ${NODE_ENV}
+    ports:
+      - "3000:3000"
+      - "9229:9229"      # Node debug port
+    command: ["node", "dist/server.js"]
+
+  test:
+    build:
+      context: .
+      target: test
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_DATABASE: ${POSTGRES_DB}
+      NODE_ENV: test
+      CI: true
+    command: ["npm", "test"]
+    profiles:
+      - test
+
+  test-unit:
+    build:
+      context: .
+      target: test
+    environment:
+      NODE_ENV: test
+      CI: true
+    command: ["npm", "run", "test:unit"]
+    profiles:
+      - test
+
+  test-coverage:
+    build:
+      context: .
+      target: test
+    environment:
+      NODE_ENV: test
+      CI: true
+    command: ["npm", "run", "test:coverage"]
+    profiles:
+      - test
+
+volumes:
+  db_data:
